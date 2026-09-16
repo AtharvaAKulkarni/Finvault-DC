@@ -71,7 +71,6 @@ public class ClockMasterServer
                     "Reference Physical Time: "
                             + System.currentTimeMillis()
             );
-
             System.out.println(
                     "Waiting for clock synchronization requests..."
             );
