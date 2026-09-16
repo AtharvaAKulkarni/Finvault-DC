@@ -1,0 +1,51 @@
+services:
+
+  clock-master:
+    build: .
+    container_name: finvault-clock-master
+    command: java ClockMasterServer
+    networks:
+      - finvault-network
+
+  finance-server-1:
+    build: .
+    container_name: finvault-server-1
+    command: java FinanceServer
+    environment:
+      CLOCK_DRIFT_MS: "5000"
+      CLOCK_MASTER_HOST: "clock-master"
+      RMI_HOSTNAME: "finance-server-1"
+    depends_on:
+      - clock-master
+    networks:
+      - finvault-network
+
+  finance-server-2:
+    build: .
+    container_name: finvault-server-2
+    command: java FinanceServer
+    environment:
+      CLOCK_DRIFT_MS: "-3000"
+      CLOCK_MASTER_HOST: "clock-master"
+      RMI_HOSTNAME: "finance-server-2"
+    depends_on:
+      - clock-master
+    networks:
+      - finvault-network
+
+  finance-server-3:
+    build: .
+    container_name: finvault-server-3
+    command: java FinanceServer
+    environment:
+      CLOCK_DRIFT_MS: "8000"
+      CLOCK_MASTER_HOST: "clock-master"
+      RMI_HOSTNAME: "finance-server-3"
+    depends_on:
+      - clock-master
+    networks:
+      - finvault-network
+
+networks:
+  finvault-network:
+    driver: bridge
