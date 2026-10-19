@@ -964,7 +964,15 @@ public class ReplicationManagerServer
                                                 + "PRIMARY FAILURE DETECTED."
                                 );
 
-                                startElection();
+                                try {
+                                    startElection();
+                                } catch (Exception e) {
+                                    System.out.println(
+                                            "[Health Monitor] "
+                                                    + "Election trigger failed: "
+                                                    + e.getMessage()
+                                    );
+                                }
 
                                 consecutiveFailures = 0;
                             }

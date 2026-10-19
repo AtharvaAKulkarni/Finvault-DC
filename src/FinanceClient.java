@@ -1,18 +1,18 @@
 import java.rmi.Naming;
-
+import load_balancing.LoadBalancerService;
 
 public class FinanceClient {
 
     private static final String RMI_HOST =
             System.getenv().getOrDefault(
-                    "FINANCE_SERVER_HOST",
+                    "LOAD_BALANCER_HOST",
                     "localhost"
             );
 
     private static final String RMI_URL =
             "rmi://"
                     + RMI_HOST
-                    + ":1234/FinanceServer";
+                    + ":8000/LoadBalancer";
 
 
     public static void main(String[] args) {
@@ -37,11 +37,8 @@ public class FinanceClient {
             );
 
 
-            FinanceService finance =
-                    (FinanceService)
-                            Naming.lookup(
-                                    RMI_URL
-                            );
+            LoadBalancerService finance =
+                    (LoadBalancerService) Naming.lookup(RMI_URL);
 
 
             System.out.println(

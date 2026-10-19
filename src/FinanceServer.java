@@ -374,212 +374,80 @@ public class FinanceServer
 
         Future<String> transactionFuture = executorService.submit(() -> {
 
-            long threadId =
-                    Thread.currentThread().getId();
-
-            String threadName =
-                    Thread.currentThread().getName();
-
+            long threadId = Thread.currentThread().getId();
+            String threadName = Thread.currentThread().getName();
 
             System.out.println(
-                    "[Thread "
-                            + threadId
-                            + "] "
-                            + threadName
-                            + " started processing TXN"
-                            + transactionId
+                    "[Thread " + threadId + "] " + threadName + " started processing TXN" + transactionId
             );
-
 
             try {
 
                 /*
-                 * -----------------------------------------
                  * STEP 1: VALIDATION
-                 * -----------------------------------------
                  */
-
-                validateTransaction(
-                        fromAccount,
-                        toAccount,
-                        amount
-                );
-
+                validateTransaction(fromAccount, toAccount, amount);
 
                 /*
-                 * -----------------------------------------
                  * STEP 2: FRAUD CHECK
-                 * -----------------------------------------
                  */
-
-                fraudCheck(
-                        customerId,
-                        amount
-                );
-
+                fraudCheck(customerId, amount);
 
                 /*
-                 * -----------------------------------------
-                 * STEP 3 + 4:
-                 *
-                 * LOCAL UPDATE AND SYNCHRONOUS
-                 * REPLICATION
-                 *
-                 * These two operations are protected by
-                 * replicationLock.
-                 * -----------------------------------------
+                 * STEP 3 + 4: LOCAL UPDATE AND SYNCHRONOUS REPLICATION
                  */
-
                 synchronized (replicationLock) {
 
+                    double oldFromBalance = accountBalances.get(fromAccount);
+                    double oldToBalance = accountBalances.get(toAccount);
 
-                    /*
-                     * Save balances so that we can roll
-                     * back if Secondary replication fails.
-                     */
+                    transferMoney(fromAccount, toAccount, amount);
 
-                    double oldFromBalance =
-                            accountBalances.get(
-                                    fromAccount
-                            );
-
-                    double oldToBalance =
-                            accountBalances.get(
-                                    toAccount
-                            );
-
-
-                    /*
-                     * -------------------------------------
-                     * UPDATE PRIMARY STATE
-                     * -------------------------------------
-                     */
-
-                    transferMoney(
+                    ReplicationResult replicationResult = replicateToManager(
+                            transactionId,
+                            customerId,
                             fromAccount,
                             toAccount,
-                            amount
+                            amount,
+                            transactionTimestamp,
+                            transactionLamport
                     );
-
-
-                    /*
-                     * -------------------------------------
-                     * REPLICATE TO SECONDARY
-                     * -------------------------------------
-                     */
-
-                    ReplicationResult replicationResult =
-                            replicateToManager(
-                                    transactionId,
-                                    customerId,
-                                    fromAccount,
-                                    toAccount,
-                                    amount,
-                                    transactionTimestamp,
-                                    transactionLamport
-                            );
-
-
-                    /*
-                     * -------------------------------------
-                     * CHECK SECONDARY ACK
-                     * -------------------------------------
-                     */
 
                     if (!replicationResult.isSuccess()) {
 
-                        /*
-                         * Replication failed.
-                         *
-                         * Roll back Primary state so that
-                         * Primary and Secondary do not
-                         * permanently diverge.
-                         */
-
-                        accountBalances.put(
-                                fromAccount,
-                                oldFromBalance
-                        );
-
-                        accountBalances.put(
-                                toAccount,
-                                oldToBalance
-                        );
-
+                        accountBalances.put(fromAccount, oldFromBalance);
+                        accountBalances.put(toAccount, oldToBalance);
 
                         System.out.println(
-                                "[Replication] TXN"
-                                        + transactionId
-                                        + " rolled back on Primary."
+                                "[Replication] TXN" + transactionId + " rolled back on Primary."
                         );
 
-
                         throw new Exception(
-                                "Synchronous replication failed: "
-                                        + replicationResult
-                                        .getMessage()
+                                "Synchronous replication failed: " + replicationResult.getMessage()
                         );
                     }
 
-
-                    /*
-                     * -------------------------------------
-                     * REPLICATION SUCCESSFUL
-                     * -------------------------------------
-                     */
-
                     System.out.println(
-                            "[Replication] TXN"
-                                    + transactionId
-                                    + " successfully replicated."
+                            "[Replication] TXN" + transactionId + " successfully replicated."
                     );
 
-
-                    /*
-                     * -------------------------------------
-                     * RECORD TRANSACTION
-                     * -------------------------------------
-                     */
-
-                    recordTransaction(
-                            transactionId,
-                            customerId,
-                            amount
-                    );
-
-
-                    /*
-                     * -------------------------------------
-                     * NOTIFICATION
-                     * -------------------------------------
-                     */
-
-                    sendNotification(
-                            customerId,
-                            transactionId
-                    );
+                    recordTransaction(transactionId, customerId, amount);
+                    sendNotification(customerId, transactionId);
                 }
 
-
                 System.out.println(
-                        "[Thread "
-                                + threadId
-                                + "] TXN"
-                                + transactionId
-                                + " completed successfully."
+                        "[Thread " + threadId + "] TXN" + transactionId + " completed successfully."
                 );
 
+                return "SUCCESS: TXN" + transactionId;
 
             } catch (Exception e) {
 
                 System.out.println(
-                        "[Thread "
-                                + threadId
-                                + "] TXN"
-                                + transactionId
-                                + " failed: "
-                                + e.getMessage()
+                        "[Thread " + threadId + "] TXN" + transactionId + " failed: " + e.getMessage()
                 );
+
+                return "FAILED: TXN" + transactionId + " - " + e.getMessage();
             }
         });
 
