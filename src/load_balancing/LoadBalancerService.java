@@ -15,4 +15,9 @@ public interface LoadBalancerService extends Remote {
     double getBalance(
             String accountNumber)
             throws RemoteException;
+
+    String createAccount(
+            String accountNumber,
+            double initialBalance)
+            throws RemoteException;
 }

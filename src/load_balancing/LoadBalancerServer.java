@@ -53,6 +53,28 @@ public class LoadBalancerServer
         System.out.println("[Load Balancer] Registered Nodes: " + nodes);
     }
 
+    @Override
+    public String createAccount(String accountNumber, double initialBalance) throws RemoteException {
+        int primaryNodeId = getPrimaryNodeId();
+        if (primaryNodeId == -1) {
+            return "Creation rejected: No active Primary available.";
+        }
+
+        System.out.println("[Load Balancer] WRITE -> Routing createAccount to PRIMARY (Node " + primaryNodeId + ")");
+
+        activeConnections.get(primaryNodeId).incrementAndGet();
+        try {
+            Remote stub = getFinanceServerStub(primaryNodeId);
+            Method method = stub.getClass().getMethod("createAccount", String.class, double.class);
+            return (String) method.invoke(stub, accountNumber, initialBalance);
+        } catch (Exception e) {
+            throw new RemoteException("Load Balancer failed write query on Node " + primaryNodeId + ": " + e.getMessage(), e);
+        } finally {
+            activeConnections.get(primaryNodeId).decrementAndGet();
+        }
+    }
+
+
     /*
      * ===================================================
      * WRITE TRANSACTION -> Always routed to PRIMARY

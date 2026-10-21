@@ -7,4 +7,6 @@ public interface FinanceService extends Remote {
             throws RemoteException;
 
     double getBalance(String accountNumber) throws RemoteException;
+
+    String createAccount(String accountNumber, double initialBalance) throws RemoteException;
 }

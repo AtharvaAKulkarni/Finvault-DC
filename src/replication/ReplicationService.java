@@ -90,4 +90,6 @@ public interface ReplicationService extends Remote {
     void updatePrimary(
             int newPrimaryId)
             throws RemoteException;
+
+    ReplicationResult replicateAccountCreation(String accountNumber, double initialBalance) throws RemoteException;
 }

@@ -220,11 +220,13 @@ public class ReplicationManagerServer
         );
 
         /*
-         * Find a Secondary.
-         *
-         * Start with the lowest node ID that
-         * is not the Primary.
+         * Replicate to EVERY live secondary (not just the first one),
+         * otherwise nodes 3 and 4 stay stale and the load balancer
+         * serves old balances from them.
          */
+        int acks = 0;
+        java.util.List<Integer> lagging = new java.util.ArrayList<>();
+        ReplicationResult lastSuccess = null;
 
         for (int nodeId : nodes.keySet()) {
 
@@ -233,63 +235,56 @@ public class ReplicationManagerServer
             }
 
             try {
+                ReplicationService secondary = getServer(nodeId);
 
-                ReplicationService secondary =
-                        getServer(nodeId);
-
-                if (secondary.getRole()
-                        != NodeRole.SECONDARY) {
-
+                if (secondary.getRole() != NodeRole.SECONDARY) {
                     continue;
                 }
 
-                ReplicationResult result =
-                        secondary.replicateTransaction(
-                                transactionId,
-                                customerId,
-                                fromAccount,
-                                toAccount,
-                                amount,
-                                physicalTimestamp,
-                                lamportTimestamp
-                        );
+                ReplicationResult result = secondary.replicateTransaction(
+                        transactionId, customerId, fromAccount, toAccount,
+                        amount, physicalTimestamp, lamportTimestamp);
 
                 if (result.isSuccess()) {
-
-                    System.out.println(
-                            "[Replication Manager] "
-                                    + "ACK received from Node "
-                                    + nodeId
-                    );
-
-                    return result;
+                    acks++;
+                    lastSuccess = result;
+                    System.out.println("[Replication Manager] ACK received from Node " + nodeId);
+                } else {
+                    lagging.add(nodeId);
+                    System.out.println("[Replication Manager] Node " + nodeId
+                            + " rejected replication: " + result.getMessage());
                 }
 
-                System.out.println(
-                        "[Replication Manager] "
-                                + "Node "
-                                + nodeId
-                                + " rejected replication: "
-                                + result.getMessage()
-                );
-
             } catch (Exception e) {
-
-                System.out.println(
-                        "[Replication Manager] "
-                                + "Node "
-                                + nodeId
-                                + " unavailable: "
-                                + e.getMessage()
-                );
+                lagging.add(nodeId);
+                System.out.println("[Replication Manager] Node " + nodeId
+                        + " unavailable: " + e.getMessage());
             }
         }
 
-        return new ReplicationResult(
-                false,
-                transactionId,
-                "No available Secondary."
-        );
+        if (acks == 0) {
+            return new ReplicationResult(false, transactionId, "No available Secondary.");
+        }
+
+        // Catch up any secondary that missed this transaction (full snapshot from Primary)
+        if (!lagging.isEmpty()) {
+            try {
+                AccountStateSnapshot snap = getServer(primaryId).getStateSnapshot();
+                for (int nodeId : lagging) {
+                    try {
+                        getServer(nodeId).applyStateSnapshot(snap);
+                        System.out.println("[Replication Manager] Node " + nodeId + " caught up via snapshot.");
+                    } catch (Exception ex) {
+                        System.out.println("[Replication Manager] Node " + nodeId
+                                + " still stale: " + ex.getMessage());
+                    }
+                }
+            } catch (Exception ex) {
+                System.out.println("[Replication Manager] Catch-up skipped: " + ex.getMessage());
+            }
+        }
+
+        return lastSuccess;
     }
 
 
@@ -888,6 +883,25 @@ public class ReplicationManagerServer
                         + newPrimaryId
         );
     }
+
+    @Override
+    public synchronized ReplicationResult replicateAccountCreation(String accountNumber, double initialBalance) throws RemoteException {
+        System.out.println("[Replication Manager] Replicating new account " + accountNumber + " (Rs. " + initialBalance + ") to all secondaries...");
+        for (int id : nodes.keySet()) {
+            if (id != primaryId) {
+                try {
+                    ReplicationService secondary = getServer(id);
+                    if (secondary != null) {
+                        secondary.replicateAccountCreation(accountNumber, initialBalance);
+                    }
+                } catch (Exception e) {
+                    System.err.println("[Replication Manager] Failed to replicate account to Node " + id + ": " + e.getMessage());
+                }
+            }
+        }
+        return new ReplicationResult(true, 0, "Account creation replicated across cluster.");
+    }
+
 
 
     /*

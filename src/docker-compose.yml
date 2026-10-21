@@ -3,14 +3,14 @@ services:
   clock-master:
     build: .
     container_name: finvault-clock-master
-    command: java clock_synchronisation.ClockMasterServer
+    command: java -cp ".:*" clock_synchronisation.ClockMasterServer
     networks:
       - finvault-network
 
   finance-server-1:
     build: .
     container_name: finvault-server-1
-    command: java FinanceServer
+    command: java -cp ".:*" FinanceServer
     ports:
       - "1234:1234"
     environment:
@@ -21,6 +21,10 @@ services:
       RMI_HOSTNAME: "finance-server-1"
       NODE_ROLE: "PRIMARY"
       REPLICATION_MANAGER_HOST: "replication-manager"
+      NODE1_HOST: "finance-server-1"
+      NODE2_HOST: "finance-server-2"
+      NODE3_HOST: "finance-server-3"
+      NODE4_HOST: "finance-server-4"
     depends_on:
       - clock-master
     networks:
@@ -29,7 +33,7 @@ services:
   finance-server-2:
     build: .
     container_name: finvault-server-2
-    command: java FinanceServer
+    command: java -cp ".:*" FinanceServer
     ports:
       - "1235:1234"
     environment:
@@ -40,6 +44,56 @@ services:
       RMI_HOSTNAME: "finance-server-2"
       NODE_ROLE: "SECONDARY"
       REPLICATION_MANAGER_HOST: "replication-manager"
+      NODE1_HOST: "finance-server-1"
+      NODE2_HOST: "finance-server-2"
+      NODE3_HOST: "finance-server-3"
+      NODE4_HOST: "finance-server-4"
+    depends_on:
+      - clock-master
+    networks:
+      - finvault-network
+
+  finance-server-3:
+    build: .
+    container_name: finvault-server-3
+    command: java -cp ".:*" FinanceServer
+    ports:
+      - "1236:1234"
+    environment:
+      NODE_ID: "3"
+      PRIMARY_ID: "1"
+      CLOCK_DRIFT_MS: "2000"
+      CLOCK_MASTER_HOST: "clock-master"
+      RMI_HOSTNAME: "finance-server-3"
+      NODE_ROLE: "SECONDARY"
+      REPLICATION_MANAGER_HOST: "replication-manager"
+      NODE1_HOST: "finance-server-1"
+      NODE2_HOST: "finance-server-2"
+      NODE3_HOST: "finance-server-3"
+      NODE4_HOST: "finance-server-4"
+    depends_on:
+      - clock-master
+    networks:
+      - finvault-network
+
+  finance-server-4:
+    build: .
+    container_name: finvault-server-4
+    command: java -cp ".:*" FinanceServer
+    ports:
+      - "1237:1234"
+    environment:
+      NODE_ID: "4"
+      PRIMARY_ID: "1"
+      CLOCK_DRIFT_MS: "-1500"
+      CLOCK_MASTER_HOST: "clock-master"
+      RMI_HOSTNAME: "finance-server-4"
+      NODE_ROLE: "SECONDARY"
+      REPLICATION_MANAGER_HOST: "replication-manager"
+      NODE1_HOST: "finance-server-1"
+      NODE2_HOST: "finance-server-2"
+      NODE3_HOST: "finance-server-3"
+      NODE4_HOST: "finance-server-4"
     depends_on:
       - clock-master
     networks:
@@ -48,12 +102,14 @@ services:
   replication-manager:
     build: .
     container_name: finvault-replication-manager
-    command: java replication.ReplicationManagerServer
+    command: java -cp ".:*" replication.ReplicationManagerServer
     environment:
       RMI_HOSTNAME: "replication-manager"
       PRIMARY_ID: "1"
       NODE1_HOST: "finance-server-1"
       NODE2_HOST: "finance-server-2"
+      NODE3_HOST: "finance-server-3"
+      NODE4_HOST: "finance-server-4"
     depends_on:
       - clock-master
     networks:
@@ -72,7 +128,7 @@ services:
       - REPLICATION_MANAGER_HOST=replication-manager
     ports:
       - "8000:8000"
-    command: [ "java", "load_balancing.LoadBalancerServer" ]
+    command: java -cp ".:*" load_balancing.LoadBalancerServer
     depends_on:
       - replication-manager
     networks:
